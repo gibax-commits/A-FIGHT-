@@ -623,8 +623,9 @@ const SkyBackdrop = () => (
 //     (発光点)の表示もここに追加していく想定。
 // =========================================================================
 
-// --- 実写立ち絵/アイテム画像アセット(テスト用プレースホルダー) ---
-// TODO: 正規絵が全タイプぶん揃ったら CHARA_ART にB/Cも追加する。
+// --- 立ち絵/アイテム画像アセット ---
+// 画像は assets/ に外部ファイルとして配置(WebP)。base64埋め込みからの移行済み。
+// TODO: ライバル4体の専用立ち絵が用意でき次第、CHARA_ART にキーを追加する。
 // TODO: 型(シルエット)が複数用意でき次第、WEAPON_VISUALS にキーを増やしていく。
 const CHARA_ART = {
   // TYPE-A
@@ -3876,8 +3877,8 @@ function App() {
 
       {/* 下部パネル:戦闘中は敵データ、それ以外は通常のシステムログを表示する。
           戦闘中の全体ログはほぼ流れないため、限られた画面を敵の情報に充てている。
-          TODO: 敵に武器の概念を実装したら、この欄に所持武装の射程('近/中/遠/列/広')
-                などを一覧表示する(残弾やHEATは表示しない想定)。 */}
+          所持武装の名前と射程は「ARMS」欄に一覧表示済み(v1.28.0)。
+          残弾とHEATは表示しない方針(戦闘ログで分かるため)。 */}
       {activeEnemy ? (
         <div className="mt-4 border border-red-900 bg-gray-950 p-3 h-28 overflow-y-auto text-xs rounded-lg shadow-inner">
           <div className="flex items-center justify-between mb-1.5 pb-1 border-b border-red-900/50">
