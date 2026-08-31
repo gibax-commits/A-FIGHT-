@@ -1,4 +1,4 @@
-<!-- A-FIGHT | BUILD: v1.33.0 paperdoll-anchors | 構成は README.md / 更新履歴は CHANGELOG.md -->
+<!-- A-FIGHT | BUILD: v1.34.0 sync-ratio-stage1 | 構成は README.md / 更新履歴は CHANGELOG.md -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -473,6 +473,43 @@ const getMoveCostMultiplier = (terrain) => terrain === 'RIVER' ? 2 : 1;
 
 const getSyncMultiplier = (s) =>
   s < 50 ? 0.7 + 0.3 * (s / 50) : s <= 100 ? 1.0 + 0.2 * ((s - 50) / 50) : 1.2 + 0.3 * ((s - 100) / 50);
+
+// =========================================================================
+// SYNC RATIO (1-B 段階1)
+// -------------------------------------------------------------------------
+// シンクロ率を2つの値に分ける。
+//   syncMax   … 上限。起動シークエンス(2-D)で初期値が決まり、育成(5-A)で引き上げる
+//   syncRatio … 現在値。戦闘で消耗し、メンテナンス(4-B)で syncMax まで回復する
+//
+// 【段階1の範囲】
+//   state化・セーブ対応・上限の概念の導入まで。消耗と回復のルールは
+//   メンテナンスモード(4-B)と同時に有効化する。回復手段が無い状態で
+//   消耗だけ入れると、減り続けて詰むため。
+//   したがって現状 syncRatio は変動せず、ゲームの挙動は v1.33.0 と同一。
+//
+// 【SYNC_BASE = 150 の意味】
+//   現行ARENAの敵倍率は、シンクロ率150%(= x1.50)を前提に調整されている。
+//   起動シークエンスでどの選択をしてもここを下回らないようにすることで、
+//   既存のバランス調整を一切崩さずに済む。正解ルートはこの上に乗る
+//   上振れとして扱う。逆にここを下げると低〜中ランクの再調整が必要になる。
+//
+//   getSyncMultiplier は意図的に変更していない。この式に触れると
+//   ARENA全体の難易度が動くため、段階1では固定する。
+// =========================================================================
+const SYNC_BASE = 150;   // 起動シークエンスの最低保証。現行バランスの基準点 (x1.50)
+const SYNC_CAP  = 250;   // 育成で到達しうる天井 (x2.10)
+
+const clampSync = (v) => Math.max(0, Math.min(SYNC_CAP, Math.round(v)));
+
+// 起動シークエンス(2-D)の結果 → syncMax の初期値。
+// TYPEごとの正解操作(タップ/スワイプ/ホールド)の判定結果を受け取る。
+//   GREAT … 正解。PLAIN との差は最大でも x1.62 対 x1.50 で、初回の選択が
+//           取り返しのつかない格差にならない幅に収めてある
+//   GOOD  … 惜しい操作
+//   PLAIN … 外した操作。ここが SYNC_BASE の下限保証にあたる
+// 2-D の実装時はこの関数を呼んで setSyncMax / setSyncRatio するだけで済む。
+const BOOT_SYNC_MAX = { GREAT: 170, GOOD: 160, PLAIN: SYNC_BASE };
+const resolveBootSyncMax = (result) => clampSync(BOOT_SYNC_MAX[result] || SYNC_BASE);
 
 // SPD差に基づく回避率(%)。速い側が遅い側を攻撃されるほど回避しやすくなる。
 // defenderEva(頭部装備等の回避率補正)は加算、attackerAcc(命中率補正)は減算。0〜35%の範囲でクランプ。
@@ -1473,7 +1510,7 @@ const ItemBadges = ({ item }) => {
 // =========================================================================
 // SCREEN: MASTER ROOM
 // =========================================================================
-const MasterRoom = ({ setPhase, fighter, syncRatio, stats, inventory, equipped }) => {
+const MasterRoom = ({ setPhase, fighter, syncRatio, syncMax, stats, inventory, equipped }) => {
   const weaponVisual = getEquippedWeaponVisual(inventory || [], equipped || {});
   const tData = TYPES[(fighter && fighter.type) || 'A'];
   return (
@@ -1503,7 +1540,9 @@ const MasterRoom = ({ setPhase, fighter, syncRatio, stats, inventory, equipped }
                 })}
               </div>
             )}
-            <div className="text-right mt-2 text-xs text-cyan-600 font-bold">SYNC補正: x{getSyncMultiplier(syncRatio).toFixed(2)}</div>
+            <div className="text-right mt-2 text-xs text-cyan-600 font-bold">
+              SYNC {syncRatio}% <span className="text-cyan-800">/ 上限 {syncMax}%</span> — 補正 x{getSyncMultiplier(syncRatio).toFixed(2)}
+            </div>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -3623,7 +3662,10 @@ function App() {
   // (戦闘外ではnullになり、通常のシステムログ表示に戻る)
   const [activeEnemy, setActiveEnemy] = useState(null);
   const [fighter, setFighter] = useState(null);
-  const [syncRatio] = useState(150);
+  // シンクロ率。現在値と上限を別に持つ(定義と設計方針は SYNC RATIO セクション参照)。
+  // 段階1では両方とも SYNC_BASE のまま動かないため、挙動は v1.33.0 と変わらない。
+  const [syncRatio, setSyncRatio] = useState(SYNC_BASE);
+  const [syncMax, setSyncMax] = useState(SYNC_BASE);
   const [materials, setMaterials] = useState(9999);
   const [inventory, setInventory] = useState([]);
   const [equipped, setEquipped] = useState({});
@@ -3746,15 +3788,20 @@ function App() {
     addLog(`[SYSTEM] 自動セーブしました。`);
   };
 
-  const saveGame = useCallback((f, mat, inv, eq, rk, rp, wte, defAvail) => {
-    const data = {
-      fighter: f, materials: mat, inventory: inv,
-      equipped: eq, rank: rk, rankPoints: rp, worldTournamentEligible: wte, defenseAvailable: defAvail,
-      savedAt: new Date().toLocaleString()
-    };
+  // 保存対象が増えるたびに引数を足していくと順番の取り違えが起きるため、
+  // スナップショットのオブジェクトを1つ受け取る形にしてある。
+  const saveGame = useCallback((snap) => {
+    const f = snap.fighter;
     // 機体のTYPEに対応するスロットへ保存する
     const type = f && f.type;
     if (!type) return;
+    const data = {
+      fighter: f, materials: snap.materials, inventory: snap.inventory,
+      equipped: snap.equipped, rank: snap.rank, rankPoints: snap.rankPoints,
+      worldTournamentEligible: snap.worldTournamentEligible, defenseAvailable: snap.defenseAvailable,
+      syncRatio: snap.syncRatio, syncMax: snap.syncMax,
+      savedAt: new Date().toLocaleString()
+    };
     writeSlot(type, data);
     setSlots(prev => ({ ...prev, [type]: data }));
     sfx.saved();
@@ -3763,9 +3810,18 @@ function App() {
     flashTimer.current = setTimeout(() => setSaveFlash(false), 2000);
   }, []);
 
+  // 現在のゲーム状態をセーブ用に1つのオブジェクトへまとめる。
+  // overrides は「stateの更新は非同期なので、更新後の値を明示的に渡す」ための口。
+  const currentSaveSnapshot = (overrides = {}) => ({
+    fighter, materials, inventory, equipped,
+    rank, rankPoints, worldTournamentEligible, defenseAvailable,
+    syncRatio, syncMax,
+    ...overrides,
+  });
+
   const handleSave = () => {
     if (!fighter) return;
-    saveGame(fighter, materials, inventory, equipped, rank, rankPoints, worldTournamentEligible, defenseAvailable);
+    saveGame(currentSaveSnapshot());
   };
 
   // ランクや王座の状態が変わる大きな節目では自動セーブする。
@@ -3774,13 +3830,7 @@ function App() {
   // 報告があったため対処)。stateの更新は非同期なので、更新後の値を明示的に受け取る。
   const autoSaveMilestone = (overrides = {}) => {
     if (!fighter) return;
-    const snap = {
-      rank, rankPoints, worldTournamentEligible, defenseAvailable,
-      materials, inventory, equipped,
-      ...overrides,
-    };
-    saveGame(fighter, snap.materials, snap.inventory, snap.equipped,
-             snap.rank, snap.rankPoints, snap.worldTournamentEligible, snap.defenseAvailable);
+    saveGame(currentSaveSnapshot(overrides));
   };
 
   // 指定スロットのデータを読み込んでゲームを再開する
@@ -3796,6 +3846,12 @@ function App() {
     setRankPoints(save.rankPoints || 0);
     setWorldTournamentEligible(!!save.worldTournamentEligible);
     setDefenseAvailable(save.defenseAvailable !== false); // 旧セーブ互換(未定義ならtrue)
+    // シンクロ率。v1.33.0以前のセーブには入っていないため、その場合は基準値に戻す。
+    // 上限より現在値が大きいデータが来ても破綻しないよう、現在値は上限で頭打ちにする。
+    const loadedMax = clampSync(Number.isFinite(save.syncMax) ? save.syncMax : SYNC_BASE);
+    const loadedRatio = clampSync(Number.isFinite(save.syncRatio) ? save.syncRatio : loadedMax);
+    setSyncMax(loadedMax);
+    setSyncRatio(Math.min(loadedRatio, loadedMax));
     setLogs([]);
     setPhase('room');
     addLog(`[SYSTEM] TYPE-${type} のセーブデータをロードしました。(${save.savedAt})`);
@@ -3839,6 +3895,10 @@ function App() {
     setRank('G');
     setRankPoints(0);
     setWorldTournamentEligible(false);
+    // 起動シークエンス(2-D)の実装後は、ここを resolveBootSyncMax(result) の
+    // 戻り値に差し替える。それまでは最低保証値で開始する。
+    setSyncMax(SYNC_BASE);
+    setSyncRatio(SYNC_BASE);
     setPhase('room');
     addLog(`[SYSTEM] ${t.name}でシステムを起動しました。`);
     addLog(`[SYSTEM] テスト用に「${PRESET_SWORD_SAMPLE.name}」を所持しています。CLOSETで装備してみてください。`);
@@ -3991,7 +4051,9 @@ function App() {
           </button>
           <span className="flex items-center gap-1">
             <IconZap size={16} className="text-yellow-400" />
+            {/* 現在値 / 上限。段階1では常に一致する */}
             <span className="text-white">{syncRatio}%</span>
+            <span className="text-[10px] text-gray-600">/{syncMax}</span>
           </span>
           <span className="flex items-center gap-1">
             <IconBattery size={16} className="text-green-500" />
@@ -4028,7 +4090,7 @@ function App() {
       </div>
 
       <div className="flex-grow flex flex-col overflow-hidden">
-        {phase === 'room' && <MasterRoom setPhase={setPhase} fighter={fighter} syncRatio={syncRatio} stats={currentStats()} inventory={inventory} equipped={equipped} />}
+        {phase === 'room' && <MasterRoom setPhase={setPhase} fighter={fighter} syncRatio={syncRatio} syncMax={syncMax} stats={currentStats()} inventory={inventory} equipped={equipped} />}
         {phase === 'closet' && <Closet inventory={inventory} setInventory={setInventory} equipped={equipped} setEquipped={setEquipped} stats={currentStats()} fighter={fighter} addLog={addLog} setPhase={setPhase} setMaterials={setMaterials} />}
         {phase === 'generator' && <Generator materials={materials} setMaterials={setMaterials} inventory={inventory} setInventory={setInventory} addLog={addLog} />}
         {phase === 'arena' && <ArenaBattle stats={currentStats()} setPhase={setPhase} addLog={addLog} materials={materials} setMaterials={setMaterials} setInventory={setInventory} inventory={inventory} equipped={equipped} rank={rank} rankPoints={rankPoints} worldTournamentEligible={worldTournamentEligible} addRankPoints={addRankPoints} winWorldTournament={winWorldTournament} resetWorldTournamentEligibility={resetWorldTournamentEligibility} defenseAvailable={defenseAvailable} loseDefense={loseDefense} setActiveEnemy={setActiveEnemy} />}
