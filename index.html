@@ -1,4 +1,4 @@
-<!-- A-FIGHT | BUILD: v1.35.0 type-catalog | 構成は README.md / 更新履歴は CHANGELOG.md -->
+<!-- A-FIGHT | BUILD: v1.35.1 type-catalog | 構成は README.md / 更新履歴は CHANGELOG.md -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -3780,7 +3780,7 @@ const TypeCatalog = ({ initialType, slots, onConfirm, onCancel }) => {
       <div className="flex justify-between items-center mb-2">
         <button
           onClick={() => { sfx.back(); onCancel(); }}
-          className="text-[10px] px-2 py-1 rounded border border-gray-700 text-gray-500 transition-all"
+          className="text-[10px] px-2 py-1 rounded border border-gray-700 text-gray-500 hover:text-cyan-400 transition-all"
         >
           ← TITLE
         </button>
@@ -3799,14 +3799,14 @@ const TypeCatalog = ({ initialType, slots, onConfirm, onCancel }) => {
         <button
           onClick={() => go(-1)}
           disabled={index === 0}
-          className="absolute z-10 px-2 py-3 rounded text-2xl transition-all"
-          style={{ left: 0, opacity: index === 0 ? 0.15 : 0.6 }}
+          className="absolute left-0 z-10 px-2 py-3 rounded text-2xl opacity-60 transition-all disabled:cursor-not-allowed disabled:opacity-30"
         >‹</button>
+        {/* right-0 だけ styles.css に含まれていないため、ここだけインラインで指定する */}
         <button
           onClick={() => go(1)}
           disabled={index === SAVE_SLOTS.length - 1}
-          className="absolute z-10 px-2 py-3 rounded text-2xl transition-all"
-          style={{ right: 0, opacity: index === SAVE_SLOTS.length - 1 ? 0.15 : 0.6 }}
+          className="absolute z-10 px-2 py-3 rounded text-2xl opacity-60 transition-all disabled:cursor-not-allowed disabled:opacity-30"
+          style={{ right: 0 }}
         >›</button>
 
         <div
@@ -3871,8 +3871,7 @@ const TypeCatalog = ({ initialType, slots, onConfirm, onCancel }) => {
         ) : (
           <button
             onClick={() => onConfirm(type)}
-            className="w-full px-4 py-3 rounded-lg border text-sm font-black tracking-widest transition-all"
-            style={{ borderColor: '#0891b2', background: 'rgba(8,51,68,0.4)', color: '#a5f3fc' }}
+            className="w-full px-4 py-3 rounded-lg border border-cyan-600 bg-cyan-950/40 text-cyan-200 text-sm font-black tracking-widest hover:bg-cyan-900/60 transition-all"
           >
             この機体を迎える
           </button>
