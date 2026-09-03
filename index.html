@@ -1,4 +1,4 @@
-<!-- A-FIGHT | BUILD: v1.34.0 sync-ratio-stage1 | 構成は README.md / 更新履歴は CHANGELOG.md -->
+<!-- A-FIGHT | BUILD: v1.35.0 type-catalog | 構成は README.md / 更新履歴は CHANGELOG.md -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -32,6 +32,36 @@ const TYPES = {
   B: { id: 'B', name: 'TYPE-B (純真・従順型)', hp: 190, atk: 18, def: 15, spd: 9, color: 'text-pink-400' },
   C: { id: 'C', name: 'TYPE-C (勝気・ツンデレ型)', hp: 110, atk: 16, def: 11, spd: 14, color: 'text-amber-400' }
 };
+
+// 2-C TYPE選択画面で読み物として出すカタログ情報。
+// 数値は TYPES 側を正とし、ここには説明文だけを置く(二重管理を避けるため)。
+// TODO: 文面は仮。2-B オープニングで世界観のトーンが固まったら書き直す。
+const TYPE_CATALOG = {
+  A: {
+    catch: '静粛のまま、最も速く',
+    body: '感情の起伏を抑え、命令の遂行を最優先するよう設計された標準機。'
+        + '装甲を削って機動を確保しており、被弾を前提としない立ち回りを要求する。'
+        + '扱いこなせば最も長く戦線に立てるが、一撃の重さは操縦者の判断に委ねられる。',
+    traits: ['最高速度', '低耐久', '寡黙'],
+  },
+  B: {
+    catch: 'あなたの言葉を、疑わない',
+    body: '対話性と追従性を重視した機体。装甲厚と出力に余裕があり、'
+        + '正面から受け止めて押し返す運用に向く。反面、機動性は3機の中で最も低い。'
+        + '初めてパートナーを迎える購入者に、最も多く選ばれている型。',
+    traits: ['最高耐久', '低速', '従順'],
+  },
+  C: {
+    catch: '認めさせてみせろ',
+    body: '出力を攻撃側に振り切った試験機。装甲は最小限で、被弾がそのまま撤退に繋がる。'
+        + '搭載された自己主張モジュールの影響で、指示に対して反論を返すことがある。'
+        + '整備性・従順性ともに低いが、噛み合った時の火力は他の追随を許さない。',
+    traits: ['高火力', '最低耐久', '勝気'],
+  },
+};
+
+// スワイプと判定する最小移動量(px)。これ未満は指の震えとみなして無視する。
+const SWIPE_THRESHOLD = 50;
 
 const EQUIP_SLOTS = [
   { id: 'HEAD', label: 'HEAD (頭部)', categories: ['HEAD'] },
@@ -664,26 +694,52 @@ const SkyBackdrop = () => (
 // 画像は assets/ に外部ファイルとして配置(WebP)。base64埋め込みからの移行済み。
 // TODO: ライバル4体の専用立ち絵が用意でき次第、CHARA_ART にキーを追加する。
 // TODO: 型(シルエット)が複数用意でき次第、WEAPON_VISUALS にキーを増やしていく。
+// バストアップの共通基準サイズ。3TYPEとも同一で、顔の大きさと目線の高さが
+// 揃うように作ってある(目線はy≒465〜505に収まっている)。
+// 2-D 起動シークエンスと 4-B メンテナンスモードで共用する。
+const BUST_SIZE = { naturalWidth: 1055, naturalHeight: 1491 };
+
+// 立ち絵と、その目閉じ差分。closedSrc は通常版と位置合わせ済みで、
+// naturalWidth / naturalHeight を共有していること自体が「同じ枠に置ける」印。
+// 差し替えても体は1pxも動かない(顔だけが変わる)。
 const CHARA_ART = {
   // TYPE-A
   A: {
     src: 'assets/chara_type_a.webp',
+    closedSrc: 'assets/chara_type_a_closed.webp',
     naturalWidth: 476,
     naturalHeight: 900,
+    bust: {
+      src: 'assets/chara_type_a_bust_normal.webp',
+      closedSrc: 'assets/chara_type_a_bust_closed.webp',
+      ...BUST_SIZE,
+    },
   },
   // TYPE-B
   B: {
     src: 'assets/chara_type_b.webp',
+    closedSrc: 'assets/chara_type_b_closed.webp',
     naturalWidth: 436,
     naturalHeight: 900,
+    bust: {
+      src: 'assets/chara_type_b_bust_normal.webp',
+      closedSrc: 'assets/chara_type_b_bust_closed.webp',
+      ...BUST_SIZE,
+    },
   },
   // TYPE-C
   C: {
     src: 'assets/chara_type_c.webp',
+    closedSrc: 'assets/chara_type_c_closed.webp',
     naturalWidth: 494,
     naturalHeight: 900,
+    bust: {
+      src: 'assets/chara_type_c_bust_normal.webp',
+      closedSrc: 'assets/chara_type_c_bust_closed.webp',
+      ...BUST_SIZE,
+    },
   },
-  // オーパ(暫定:旧TYPE-A立ち絵を流用)
+  // オーパ(暫定:旧TYPE-A立ち絵を流用。目閉じ・バストアップは持たない)
   OOPA: {
     src: 'assets/chara_oopa.webp',
     naturalWidth: 280,
@@ -3656,6 +3712,176 @@ function loadAllSlots() {
   return out;
 }
 
+// =========================================================================
+// 2-C TYPE選択画面(カタログ)
+// -------------------------------------------------------------------------
+// 「主人公がカタログを眺めて、購入する機体を決める」場面。
+// 1画面につき1体を大きく見せ、左右スワイプで A→B→C を切り替える。
+//
+// 立ち絵は ROOM と同じ InteractiveFighterSVG を流用しているため、
+// この画面は専用の描画コードを持たない。装備を渡していないので素の立ち絵が出る。
+//
+// 既にセーブデータがあるTYPEは購入できない。上書き事故を防ぐためで、
+// タイトルからCONTINUEするか、データを消してもらう。
+//
+// 2-B オープニングが実装されたら、その直後にこの画面へ繋ぐ。
+// 購入確定後は 2-D 起動シークエンス → 2-E 名付け へ続く予定だが、
+// どちらも未実装のため現状は onConfirm がそのままゲーム本編を開始する。
+// =========================================================================
+const TypeCatalog = ({ initialType, slots, onConfirm, onCancel }) => {
+  const [index, setIndex] = useState(Math.max(0, SAVE_SLOTS.indexOf(initialType)));
+  const [dragX, setDragX] = useState(0);
+  const startX = useRef(null);
+
+  // 立ち絵の高さ。説明文とスペックを画面内に収めたいので、画面高から逆算する。
+  // 縦持ち・横持ちの切り替えに追従させるため resize を拾っている。
+  const [artH, setArtH] = useState(() => Math.min(400, Math.round(window.innerHeight * 0.42)));
+  useEffect(() => {
+    const onResize = () => setArtH(Math.min(400, Math.round(window.innerHeight * 0.42)));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const type = SAVE_SLOTS[index];
+  const t = TYPES[type];
+  const cat = TYPE_CATALOG[type];
+  const taken = !!(slots[type] && slots[type].fighter);
+
+  const go = (dir) => {
+    const next = index + dir;
+    if (next < 0 || next >= SAVE_SLOTS.length) return;
+    sfx.navigate();
+    setIndex(next);
+  };
+
+  // --- スワイプ操作 ---
+  // 指の移動量をそのまま立ち絵の位置に反映して、めくっている感触を出す。
+  const handleTouchStart = (e) => { startX.current = e.touches[0].clientX; };
+  const handleTouchMove = (e) => {
+    if (startX.current === null) return;
+    const dx = e.touches[0].clientX - startX.current;
+    // 端では引っ張れる量を減らし、これ以上めくれないことを手応えで伝える
+    const atEdge = (dx > 0 && index === 0) || (dx < 0 && index === SAVE_SLOTS.length - 1);
+    setDragX(atEdge ? dx * 0.25 : dx);
+  };
+  const handleTouchEnd = () => {
+    const dx = dragX;
+    startX.current = null;
+    setDragX(0);
+    if (Math.abs(dx) < SWIPE_THRESHOLD) return;
+    go(dx < 0 ? 1 : -1); // 左へ払う = 次のTYPEへ
+  };
+
+  const accent = t.color;
+
+  return (
+    <div className="flex flex-col min-h-screen bg-black text-cyan-400 font-mono p-4">
+      {/* カタログの体裁。世界観上は「購入前に眺めている端末の画面」 */}
+      <div className="flex justify-between items-center mb-2">
+        <button
+          onClick={() => { sfx.back(); onCancel(); }}
+          className="text-[10px] px-2 py-1 rounded border border-gray-700 text-gray-500 transition-all"
+        >
+          ← TITLE
+        </button>
+        <div className="text-[10px] text-gray-600 tracking-widest">PRODUCT CATALOG</div>
+        <div className="text-[10px] text-gray-600">{index + 1} / {SAVE_SLOTS.length}</div>
+      </div>
+
+      <div
+        className="flex-1 flex flex-col items-center justify-center relative overflow-hidden select-none"
+        style={{ touchAction: 'pan-y' }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        {/* 左右の矢印。スワイプが効かない環境と、スワイプに気づかない人のため */}
+        <button
+          onClick={() => go(-1)}
+          disabled={index === 0}
+          className="absolute z-10 px-2 py-3 rounded text-2xl transition-all"
+          style={{ left: 0, opacity: index === 0 ? 0.15 : 0.6 }}
+        >‹</button>
+        <button
+          onClick={() => go(1)}
+          disabled={index === SAVE_SLOTS.length - 1}
+          className="absolute z-10 px-2 py-3 rounded text-2xl transition-all"
+          style={{ right: 0, opacity: index === SAVE_SLOTS.length - 1 ? 0.15 : 0.6 }}
+        >›</button>
+
+        <div
+          className="flex flex-col items-center"
+          style={{
+            transform: `translateX(${dragX}px)`,
+            // 指を離した時だけ滑らかに戻す(ドラッグ中は追従を優先)
+            transition: dragX === 0 ? 'transform 0.25s ease-out' : 'none',
+          }}
+        >
+          <div className={`text-3xl font-black tracking-widest ${accent}`}>TYPE-{type}</div>
+          <div className="text-xs text-gray-500 mb-2">{cat.catch}</div>
+          <InteractiveFighterSVG typeId={type} height={String(artH)} />
+        </div>
+      </div>
+
+      {/* ページ位置。現在地が分かるとスワイプできることに気づきやすい */}
+      <div className="flex justify-center gap-2 mb-3">
+        {SAVE_SLOTS.map((s, i) => (
+          <div
+            key={s}
+            className="rounded-full transition-all"
+            style={{ width: 8, height: 8, background: i === index ? '#22d3ee' : '#374151' }}
+          />
+        ))}
+      </div>
+
+      <div className="w-full max-w-md mx-auto">
+        <div className="flex justify-center gap-2 mb-2">
+          {cat.traits.map(tr => (
+            <span key={tr} className="text-[10px] px-2 py-0.5 rounded border border-gray-700 text-gray-400">{tr}</span>
+          ))}
+        </div>
+
+        <p className="text-[11px] text-gray-400 leading-relaxed mb-3">{cat.body}</p>
+
+        {/* スペック。TYPES の素の値をそのまま出す(シンクロ補正は購入後にかかる) */}
+        <div className="grid grid-cols-2 gap-2 text-xs mb-4">
+          <div className="flex justify-between bg-gray-950 border border-gray-800 rounded px-2 py-1">
+            <span className="text-gray-600">HP</span><span className="text-white font-bold">{t.hp}</span>
+          </div>
+          <div className="flex justify-between bg-gray-950 border border-gray-800 rounded px-2 py-1">
+            <span className="text-gray-600">ATK</span><span className="text-white font-bold">{t.atk}</span>
+          </div>
+          <div className="flex justify-between bg-gray-950 border border-gray-800 rounded px-2 py-1">
+            <span className="text-gray-600">DEF</span><span className="text-white font-bold">{t.def}</span>
+          </div>
+          <div className="flex justify-between bg-gray-950 border border-gray-800 rounded px-2 py-1">
+            <span className="text-gray-600">SPD</span><span className="text-white font-bold">{t.spd}</span>
+          </div>
+        </div>
+
+        {taken ? (
+          <div className="text-center">
+            <div className="w-full px-4 py-3 rounded-lg border border-gray-800 bg-gray-950 text-gray-600 text-sm font-black tracking-widest">
+              購入済み
+            </div>
+            <div className="text-[10px] text-gray-600 mt-1">
+              この型は既に迎えています。タイトルのスロットから続きを再開してください。
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => onConfirm(type)}
+            className="w-full px-4 py-3 rounded-lg border text-sm font-black tracking-widest transition-all"
+            style={{ borderColor: '#0891b2', background: 'rgba(8,51,68,0.4)', color: '#a5f3fc' }}
+          >
+            この機体を迎える
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
 function App() {
   const [phase, setPhase] = useState('title');
   // 戦闘中の敵情報。下部パネルを戦闘中だけ「敵データ表示」に切り替えるために保持する
@@ -3680,6 +3906,7 @@ function App() {
   const [confirmDelete, setConfirmDelete] = useState(null); // 削除確認中のスロット(誤操作防止)
   const [confirmLoad, setConfirmLoad] = useState(false);   // ロードの確認待ち
   const [confirmTitle, setConfirmTitle] = useState(false); // タイトル復帰の確認待ち
+  const [catalogType, setCatalogType] = useState('A');      // カタログ(2-C)で最初に表示する型
   const [saveFlash, setSaveFlash] = useState(false);
   const [sfxOn, setSfxOn] = useState(true);
   const flashTimer = useRef(null);
@@ -3885,7 +4112,17 @@ function App() {
     setSlots(prev => ({ ...prev, [type]: null }));
   };
 
+  // タイトルの空きスロットを押した時。すぐ開始せず、まずカタログ(2-C)を開く。
+  // カタログ内でTYPEを変更できるため、ここで渡すのは「最初に表示する型」でしかない。
   const handleNewGame = (type) => {
+    sfx.select();
+    setCatalogType(type);
+    setPhase('typeselect');
+  };
+
+  // カタログで購入を確定した時に、実際にゲームを開始する。
+  // 2-D 起動シークエンスと 2-E 名付けが実装されたら、この呼び出しの前に挟む。
+  const startNewGame = (type) => {
     sfx.select();
     const t = TYPES[type];
     setFighter({ type, ...t });
@@ -3933,6 +4170,18 @@ function App() {
       specials
     };
   };
+
+  // 2-C TYPE選択画面。タイトルの次、ゲーム本編の前に挟まる独立した画面。
+  if (phase === 'typeselect') {
+    return (
+      <TypeCatalog
+        initialType={catalogType}
+        slots={slots}
+        onConfirm={startNewGame}
+        onCancel={() => setPhase('title')}
+      />
+    );
+  }
 
   if (phase === 'title') {
     return (
