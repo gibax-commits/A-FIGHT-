@@ -11,7 +11,10 @@
 ```
 A-FIGHT-/
 ├── index.html          ゲーム本体(HTML + JSX)
-├── styles.css          Tailwind ビルド済みCSS
+├── tailwind.config.js  styles.css のビルド設定(safelist を含む)
+├── tailwind.input.css  @tailwind ディレクティブのみ
+├── package.json        tailwindcss 3.4.19 を固定
+├──gitignore
 ├── CHANGELOG.md        更新履歴 v1.0.0 〜
 ├── README.md
 ├── assets/             画像素材(WebP)
