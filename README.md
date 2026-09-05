@@ -11,10 +11,11 @@
 ```
 A-FIGHT-/
 ├── index.html          ゲーム本体(HTML + JSX)
+├── styles.css          Tailwind ビルド済みCSS
 ├── tailwind.config.js  styles.css のビルド設定(safelist を含む)
 ├── tailwind.input.css  @tailwind ディレクティブのみ
 ├── package.json        tailwindcss 3.4.19 を固定
-├── gitignore
+├── .gitignore          node_modules/ を除外
 ├── CHANGELOG.md        更新履歴 v1.0.0 〜
 ├── README.md
 ├── assets/             画像素材(WebP)
@@ -53,29 +54,38 @@ A-FIGHT-/
 
 **画像は必ず `assets/` に外部ファイルとして置く。** HTMLへのbase64埋め込みは行わない。以前は埋め込んでいたが、画像5点でファイルの56%を占め、必要素材は約166点あるため破綻する。外部化により本体は651,706文字から213,344文字まで縮んだ。
 
-**`index.html` を差し替えるときは、ダウンロード前に古いファイルを消しておく。** `index (1).html` のまま上げると、リポジトリに新旧2つが並び、GitHub Pagesは古い `index.html` を配信し続ける。
+**`index.html` を差し替えるときは、ダウンロード前に古いファイルを消しておく。** `index (1).html` のまま上げると、リポジトリに新旧2つが並び、GitHub Pagesは古い `index.html` を配信し続ける。`styles.css` も同じで、`index.html` の11行目が `href="styles.css"` と決め打ちしているため、名前がずれると無言で古いCSSが使われる。
 
 **JSファイルの分割は簡単ではない。** Babel standalone は各スクリプトを別々のスコープで評価するため、単純に分けると `const` が他のファイルから見えなくなる。分けるなら `window` 経由にするかESモジュール化が必要で、どちらも広範囲の修正になる。
 
 **チャット内プレビューでは画像が表示されない。** 外部ファイル参照はサンドボックス環境で読めないため、動作確認はGitHub Pagesかローカル保存で行う。
 
-styles.css は Tailwind CLI で生成する。設定は tailwind.config.js にある。
+**`styles.css` は Tailwind CLI で生成する。設定は `tailwind.config.js` にある。**
 
-コード npm ci
+```
+npm install
 npm run build:css
+```
 
-Tailwind v3.4.19・既定テーマ・プラグインなし。styles.css に独自ルールは1行も含まれず、
-Tailwindの出力だけで構成されている。カスタムのスクロールバー指定などは
-index.html 側の <style> にある。
+`package-lock.json` は置いていない。`package.json` が `tailwindcss` を `3.4.19` に固定しているため、`npm install` でも同じバージョンが入る。
 
-以前の styles.css は index.html を走査しただけのビルドで、その時点で書かれていた
-クラスしか入っていなかった。sticky tracking-wider grid-cols-3 text-base といった
-よく使うものが軒並み欠けており、新規画面を作るたびに制約が効いていた。
+Tailwind v3.4.19・既定テーマ・プラグインなし。`styles.css` に独自ルールは1行も含まれず、Tailwindの出力だけで構成されている。カスタムのスクロールバー指定などは `index.html` 側の `<style>` にある。
 
-現在は safelist でレイアウト・余白・サイズ・文字・枠・効果の各ユーティリティと、
-全パレットの text- / bg- / border- / from- / via- / to- を先に出してある。
+以前の `styles.css` は `index.html` を走査しただけのビルドで、その時点で書かれていたクラスしか入っていなかった。`sticky` `tracking-wider` `grid-cols-3` `text-base` といったよく使うものが軒並み欠けており、新規画面を作るたびに制約が効いていた。
 
-index.html を編集しただけでは CSS は古くならない。
+現在は `safelist` でレイアウト・余白・サイズ・文字・枠・効果の各ユーティリティと、全パレットの `text-` / `bg-` / `border-` / `from-` / `via-` / `to-` を先に出してある。**`index.html` を編集しただけでは CSS は古くならない。**
+
+### 再ビルドが必要になる場合
+
+- **任意値を新しく書いたとき** … `h-[350px]` `max-h-[70vh]` `shadow-[0_0_20px_rgba(...)]` など角括弧を使う指定は列挙できないため、safelist に載らない
+- **新しい色に透過を掛けたとき** … `bg-violet-900/40` のような「色 + 透過」。既存の配色ぶんは safelist に入っているが、新しい組み合わせは対象外。頻繁に必要なら `tailwind.config.js` の `WITH_OPACITY` を `true` にする(全パレットぶんを出力する。約970KB → 約1.8MB)
+- **新しい色に `hover:` や `md:` を付けたとき**
+
+いずれも、書いたクラスが効いていないと感じたら `npm run build:css` を回せばよい。
+
+### 収録されているか確かめる
+
+`styles.css` を「`.クラス名{`」で検索する。`:` `/` `.` `[` `]` はセレクタ内で `\` でエスケープされている点に注意(`bg-red-900\/40` `h-\[350px\]` のようになる)。
 
 ---
 
