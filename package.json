@@ -1,0 +1,11 @@
+{
+  "name": "a-fight-css",
+  "private": true,
+  "description": "A-FIGHT の styles.css を生成するためのビルド設定",
+  "scripts": {
+    "build:css": "tailwindcss -c tailwind.config.js -i tailwind.input.css -o styles.css --minify"
+  },
+  "devDependencies": {
+    "tailwindcss": "3.4.19"
+  }
+}
