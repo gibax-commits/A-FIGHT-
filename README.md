@@ -60,16 +60,21 @@ A-FIGHT-/
 **チャット内プレビューでは画像が表示されない。** 外部ファイル参照はサンドボックス環境で読めないため、動作確認はGitHub Pagesかローカル保存で行う。
 
 styles.css は Tailwind CLI で生成する。設定は tailwind.config.js にある。
+
 コード npm ci
 npm run build:css
+
 Tailwind v3.4.19・既定テーマ・プラグインなし。styles.css に独自ルールは1行も含まれず、
 Tailwindの出力だけで構成されている。カスタムのスクロールバー指定などは
 index.html 側の <style> にある。
+
 以前の styles.css は index.html を走査しただけのビルドで、その時点で書かれていた
 クラスしか入っていなかった。sticky tracking-wider grid-cols-3 text-base といった
 よく使うものが軒並み欠けており、新規画面を作るたびに制約が効いていた。
+
 現在は safelist でレイアウト・余白・サイズ・文字・枠・効果の各ユーティリティと、
 全パレットの text- / bg- / border- / from- / via- / to- を先に出してある。
+
 index.html を編集しただけでは CSS は古くならない。
 
 ---
